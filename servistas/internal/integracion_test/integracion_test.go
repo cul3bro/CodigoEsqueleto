@@ -31,7 +31,7 @@ const (
 	NODOCLIENTE3 = MAQUINA1 + ":" + PUERTO4
 
 	// PATH de los (plural) ejecutables de modulo golang de servicio de vistas
-	PATH = "/home/tmp/servistas/v2/cmd/"
+	PATH = "/home/fuster/Descargas/Practica4/CodigoEsqueleto/servistas/cmd/"
 
 	// fichero main de ejecutables relativos a PATH previo
 	EXECGV      = "cmdsrvvts/main.go " + NODOGV // un parámetro
@@ -47,7 +47,7 @@ const (
 	// Ubicar, en esta constante, el PATH completo a vuestra clave privada local
 	// emparejada con la clave pública en authorized_keys de máquinas remotas
 
-	PRIVKEYFILE = "/home/unai/.ssh/id_ed25519"
+	PRIVKEYFILE = "/home/fuster/.ssh/id_rsa"
 )
 
 // TEST primer rango
@@ -71,6 +71,10 @@ func TestPrimerasPruebas(t *testing.T) { // (m *testing.M) {
 	// Test3: Primer nodo copia
 	t.Run("C=1:T3",
 		func(t *testing.T) { ts.PrimerCopiaTest3(t) })
+
+	// Test4: Copia toma relevo
+	t.Run(":T4",
+		func(t *testing.T) { ts.CopiaTomaRelevoTest4(t) })
 
 	// tear down code
 	// eliminar procesos en máquinas remotas
@@ -192,6 +196,7 @@ func (ts *testServer) primerPrimarioTest2(t *testing.T) {
 	fmt.Println(".............", t.Name(), "Superado")
 }
 
+// Hace a nodo 2 la copia
 func (ts *testServer) PrimerCopiaTest3(t *testing.T) {
 	//t.Skip("SKIPPED PrimerCopiaTest3")
 
@@ -222,12 +227,80 @@ func (ts *testServer) PrimerCopiaTest3(t *testing.T) {
 	fmt.Println(".............", t.Name(), "Superado")
 }
 
+// Copia toma relevo si primario falla
+func (ts *testServer) CopiaTomaRelevoTest4(t *testing.T) {
+	var vTentativa gvcomun.Vista
+	// Mandar latidos de s2 durante 250 milis hasta que el GV de por muerto
+	// a S1
+	fmt.Printf("antes del for\n")
+	vTentativa = ts.clienteLatido(t, NODOCLIENTE2, 2)
+	vTentativa = ts.clienteLatido(t, NODOCLIENTE1, 2)
+	time.Sleep(time.Millisecond * 50)
+	vTentativa = ts.clienteLatido(t, NODOCLIENTE2, vTentativa.NumVista)
+	time.Sleep(time.Millisecond * 50)
+	vTentativa = ts.clienteLatido(t, NODOCLIENTE2, vTentativa.NumVista)
+	time.Sleep(time.Millisecond * 50)
+	vTentativa = ts.clienteLatido(t, NODOCLIENTE2, vTentativa.NumVista)
+	time.Sleep(time.Millisecond * 50)
+	vTentativa = ts.clienteLatido(t, NODOCLIENTE2, vTentativa.NumVista)
+	time.Sleep(time.Millisecond * 50)
+	vTentativa = ts.clienteLatido(t, NODOCLIENTE2, vTentativa.NumVista)
+
+	//bucle:
+	//for {
+	//	select {
+	//	case <-time.After(time.Millisecond * gvcomun.INTERVALOLATIDOS * 5):
+	//		break bucle
+	//	default:
+	//		time.Sleep(gvcomun.INTERVALOLATIDOS * time.Millisecond)
+	//		vTentativa = ts.clienteLatido(t, NODOCLIENTE2, 2)
+	//	}
+	//}
+	fmt.Printf("--------------------- %v\n", vTentativa)
+
+	// Preparar las vistas a comparar entre recibida y vista esperada
+	vac := vistasAcomparar{t: t,
+		recibido: vTentativa,
+		referencia: gvcomun.Vista{Primario: NODOCLIENTE2,
+			Copia:    msgsys.HOSTINDEFINIDO,
+			NumVista: 3},
+	}
+
+	// Comprobar vista tentativa recibida
+	vac.comprobar()
+	fmt.Println(".............", t.Name(), "Superado")
+}
+
 func (ts *testServer) clienteLatido0(t *testing.T,
 	nodoCliente msgsys.HostPuerto) gvcomun.Vista {
 
 	// solo nos interesa la vista tentativa devuelta por latido a Gestor Vistas
 	m, ok := ts.SendReceive(nodoCliente,
 		gvcomun.MsgLatido{0, nodoCliente},
+		gvcomun.ANSWERWAITTIME*time.Millisecond,
+	)
+	if !ok {
+		t.Fatal("Salta timeout esperando latido 0 de cliente")
+	}
+
+	switch x := m.(type) {
+	case gvcomun.MsgVistaTentativa:
+		return x.Vista // salida correcta
+	default:
+		t.Fatalf(t.Name(),
+			"Mensaje recibido INCORRECTO en primerPrimario: %#v", x)
+	}
+
+	// no debería llegar a ejecutarse, pero se pone por error compilacion
+	return gvcomun.Vista{}
+}
+
+func (ts *testServer) clienteLatido(t *testing.T,
+	nodoCliente msgsys.HostPuerto, numVista int) gvcomun.Vista {
+
+	// solo nos interesa la vista tentativa devuelta por latido a Gestor Vistas
+	m, ok := ts.SendReceive(nodoCliente,
+		gvcomun.MsgLatido{numVista, nodoCliente},
 		gvcomun.ANSWERWAITTIME*time.Millisecond,
 	)
 	if !ok {

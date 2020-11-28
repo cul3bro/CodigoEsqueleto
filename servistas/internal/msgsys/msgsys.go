@@ -13,7 +13,7 @@ type Message interface{} //tipo generico, incluye todos los tipos existentes
 
 const (
 	// Dato no conocido
-	HOSTINDEFINIDO = "HOST INDEFINIDO"
+	HOSTINDEFINIDO = ""
 	// Máximo nº de mensajes en mailbox
 	MAXMESSAGES = 10000
 )

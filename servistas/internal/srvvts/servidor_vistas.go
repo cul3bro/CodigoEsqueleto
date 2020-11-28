@@ -92,7 +92,7 @@ iteracion:
 }
 
 func (sv *ServVistas) procesaMensaje(m msgsys.Message) {
-	//log.Printf("----Recibido mensaje : %#v\n", m)
+	log.Printf("GV----Recibido mensaje : %#v\n", m)
 
 	switch x := m.(type) {
 	case gvcomun.MsgLatido:
@@ -161,23 +161,45 @@ func (sv *ServVistas) tratarPetitionVistaValida(x gvcomun.MsgPeticionVistaValida
 // 	un nº @latidos_fallidos de @intervalo_latidos, los considera caídos.
 func (sv *ServVistas) procesaSituacionReplicas() {
 
+	f, err := os.OpenFile("text.log",
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Println(err)
+	}
+	defer f.Close()
+	logger := log.New(f, "prefix", log.LstdFlags)
 	for servidor, retrasos := range sv.servidores {
-		retrasos += 1
+		sv.servidores[servidor] = retrasos + 1
+		logger.Printf("Nodo Retraso -> %s, %d", servidor, sv.servidores[servidor])
 		// Ha fallado 4 latidos
 		if retrasos == gvcomun.LATIDOSFALLIDOS {
+			logger.Printf("Nodo Caido -> %s", servidor)
 			sv.procesarServidorCaido(servidor)
 		}
 	}
 }
 
 func (sv *ServVistas) procesarServidorCaido(servidor msgsys.HostPuerto) {
+	f, err := os.OpenFile("text.log",
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Println(err)
+	}
+	defer f.Close()
+	logger := log.New(f, "prefix", log.LstdFlags)
 	delete(sv.servidores, servidor)
 	switch servidor {
 	case sv.vistaTentativa.Primario:
+		logger.Printf("Fallo del primario")
+		logger.Printf("Valida %v\n", sv.vistaValida)
+		logger.Printf("Tentativa %v\n", sv.vistaTentativa)
 		// Ha fallado el primario
 		if sv.esConsistente() {
+			logger.Printf("Es consistente")
 			sv.promocionarCopia()
 		} else {
+			logger.Printf("Es no consistente")
+
 			log.Fatalf("Fallo de consistencia %v", sv.vistaTentativa)
 		}
 	case sv.vistaTentativa.Copia:
@@ -204,7 +226,15 @@ func (sv *ServVistas) nuevaVistaCopia() {
 }
 
 func (sv *ServVistas) promocionarCopia() {
+	f, err := os.OpenFile("text.log",
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Println(err)
+	}
+	defer f.Close()
+	logger := log.New(f, "prefix", log.LstdFlags)
 	nuevaCopia := sv.obtenerServidorEspera()
+	logger.Printf("Promocionando a copia %s\n", nuevaCopia)
 
 	sv.vistaTentativa = gvcomun.Vista{
 		NumVista: sv.vistaTentativa.NumVista + 1,
@@ -225,7 +255,15 @@ func (sv *ServVistas) obtenerServidorEspera() msgsys.HostPuerto {
 }
 
 func (sv *ServVistas) confirmarVista(x gvcomun.MsgLatido) {
+	f, err := os.OpenFile("text.log",
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Println(err)
+	}
+	defer f.Close()
+	logger := log.New(f, "prefix", log.LstdFlags)
 	if x.Remitente == sv.vistaTentativa.Primario {
+		logger.Printf("Vita confirmada %v\n", sv.vistaValida)
 		sv.vistaValida = sv.vistaTentativa
 	}
 }

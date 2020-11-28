@@ -10,9 +10,9 @@ import (
 
 func TestBasico(t *testing.T) {
 	cmd :=
-		"cd /home/tmp/servistas/v2/cmd/; go run cmdsrvvts/main.go 127.0.0.1:29001"
+		"cd /home/fuster/Descargas/Practica4/CodigoEsqueleto/servistas/cmd/; go run cmdsrvvts/main.go 127.0.0.1:29001"
 	r := make(chan string, 1000)
-	ExecMutipleHosts(cmd, []string{"127.0.0.1"}, r, "/home/unai/.ssh/id_ed25519")
+	ExecMutipleHosts(cmd, []string{"127.0.0.1"}, r, "/home/fuster/.ssh/id_rsa")
 
 	time.Sleep(1000 * time.Millisecond)
 
