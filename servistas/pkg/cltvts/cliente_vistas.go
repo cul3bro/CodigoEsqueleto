@@ -6,8 +6,8 @@
 package cltvts
 
 import (
-	"servistas/v2/internal/gvcomun"
-	"servistas/v2/internal/msgsys"
+	"servistas/internal/gvcomun"
+	"servistas/internal/msgsys"
 )
 
 type Remitente interface {
@@ -17,6 +17,14 @@ type Remitente interface {
 
 type CltVts struct {
 	Gv msgsys.HostPuerto // dirección completa de red de GV
+}
+
+func Make(me msgsys.HostPuerto, gv msgsys.HostPuerto) CltVts {
+	gvcomun.ChangeLogPrefix()
+
+	gvcomun.RegistrarTiposMensajesGV()
+
+	return CltVts{}
 }
 
 func (cv CltVts) Latido(rt Remitente, numVista int) {
