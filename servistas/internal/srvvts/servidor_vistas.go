@@ -98,8 +98,7 @@ func (sv *ServVistas) procesaMensaje(m msgsys.Message) {
 	case gvcomun.MsgLatido:
 		sv.trataLatido(x)
 	case gvcomun.MsgPeticionVistaValida:
-		// falta la funcion de devolver la vista valida
-		log.Println("Recibido peticion vista valida")
+		sv.tratarPetitionVistaValida(x)
 	case gvcomun.MsgPeticionPrimario:
 		sv.trataPeticionPrimario(x.Remitente)
 	case gvcomun.MsgTickInterno:
@@ -116,7 +115,6 @@ func (sv *ServVistas) procesaMensaje(m msgsys.Message) {
 
 /// RESTO DE FUNCIONES DEL GESTOR DE VISTAS A IMPLEMENTAR ?????????
 
-
 func (sv *ServVistas) trataLatido(x gvcomun.MsgLatido) {
 	switch x.NumVista {
 	case -1:
@@ -132,12 +130,13 @@ func (sv *ServVistas) trataLatido(x gvcomun.MsgLatido) {
 		}
 
 	case sv.vistaTentativa.NumVista:
-
-		sv.confirmarVista(x)
+		if !sv.esConsistente() {
+			sv.confirmarVista(x)
+		}
 	}
 
 	sv.servidores[x.Remitente] = 0
-	sv.MsgSys.Send(x.Remitente, gvcomun.MsgVistaTentativa{Vista: sv.vistaTentativa})
+	sv.Send(x.Remitente, gvcomun.MsgVistaTentativa{Vista: sv.vistaTentativa})
 
 }
 
@@ -150,15 +149,19 @@ func (sv *ServVistas) inicializarVista(x gvcomun.MsgLatido) {
 	sv.vistaTentativa.NumVista += 1
 }
 
-func (sv *ServVistas) trataPeticionPrimario(x msgsys.HostPuerto)  {
-	//return primario valido
+func (sv *ServVistas) trataPeticionPrimario(x msgsys.HostPuerto) {
+	sv.Send(x, gvcomun.MsgPrimario(sv.vistaValida.Primario))
+}
+
+func (sv *ServVistas) tratarPetitionVistaValida(x gvcomun.MsgPeticionVistaValida) {
+	sv.Send(x.Remitente, gvcomun.MsgVistaValida{sv.vistaValida})
 }
 
 // Si no recibe ningún Latido de alguno de los servidores c/v durante
 // 	un nº @latidos_fallidos de @intervalo_latidos, los considera caídos.
 func (sv *ServVistas) procesaSituacionReplicas() {
 
-	for servidor, retrasos := range sv.servidores{
+	for servidor, retrasos := range sv.servidores {
 		retrasos += 1
 		// Ha fallado 4 latidos
 		if retrasos == gvcomun.LATIDOSFALLIDOS {
@@ -196,7 +199,7 @@ func (sv *ServVistas) nuevaVistaCopia() {
 	sv.vistaTentativa = gvcomun.Vista{
 		NumVista: sv.vistaTentativa.NumVista + 1,
 		Primario: sv.vistaTentativa.Primario,
-		Copia: nuevaCopia,
+		Copia:    nuevaCopia,
 	}
 }
 
@@ -206,11 +209,11 @@ func (sv *ServVistas) promocionarCopia() {
 	sv.vistaTentativa = gvcomun.Vista{
 		NumVista: sv.vistaTentativa.NumVista + 1,
 		Primario: sv.vistaTentativa.Copia,
-		Copia: nuevaCopia ,
+		Copia:    nuevaCopia,
 	}
 }
 
-func (sv *ServVistas) obtenerServidorEspera() (msgsys.HostPuerto) {
+func (sv *ServVistas) obtenerServidorEspera() msgsys.HostPuerto {
 	if len(sv.servidores) > 2 {
 		for servidor, _ := range sv.servidores {
 			if servidor != sv.vistaTentativa.Primario {

@@ -58,9 +58,14 @@ type MsgTickInterno struct{}
 func RegistrarTiposMensajesGV() {
 	// Registrar tipos mensajes de todos los tipos de servidores
 	// para decodificación con Encode y Decode de red
-	tiposMensaje := []msgsys.Message{MsgLatido{}, MsgVistaTentativa{},
-		MsgPeticionPrimario{}, MsgPrimario(""), MsgPeticionVistaValida{},
-		MsgVistaValida{}, MsgFin{}}
+	tiposMensaje := []msgsys.Message{
+		MsgLatido{},              // lo que mandan los servidores c/v
+		MsgVistaTentativa{},      //lo que devuelve el servidor en un latido
+		MsgPeticionPrimario{},    //cliente de almacenamiento pide primario a GV
+		MsgPrimario(""),          //GV devuelve primario valido
+		MsgPeticionVistaValida{}, //depuracion
+		MsgVistaValida{},
+		MsgFin{}} //fin
 	msgsys.Registrar(tiposMensaje)
 }
 
