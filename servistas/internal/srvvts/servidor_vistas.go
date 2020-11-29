@@ -116,16 +116,28 @@ func (sv *ServVistas) procesaMensaje(m msgsys.Message) {
 /// RESTO DE FUNCIONES DEL GESTOR DE VISTAS A IMPLEMENTAR ?????????
 
 func (sv *ServVistas) trataLatido(x gvcomun.MsgLatido) {
+	f, err := os.OpenFile("text.log",
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Println(err)
+	}
+	defer f.Close()
+	logger := log.New(f, "prefix", log.LstdFlags)
 	switch x.NumVista {
 	case -1:
 		// EL NODO SIGUE VIVO
 	case 0:
 		//Puede haber habido perdida de datos
 		// Estado inical inconsistente
+		logger.Printf("Latido 0 de %v", x.Remitente)
 		if sv.vistaValida.NumVista == 0 {
 			sv.inicializarVista(x)
 		} else {
-			// Cambiar porsiacaso
+			if _, esta := sv.servidores[x.Remitente]; esta {
+				logger.Printf("Latido 0 de %v y estaba online", x.Remitente)
+
+				sv.procesarServidorCaido(x.Remitente, esta)
+			}
 			sv.añadirServidorEspera(x)
 		}
 
@@ -134,7 +146,7 @@ func (sv *ServVistas) trataLatido(x gvcomun.MsgLatido) {
 			sv.confirmarVista(x)
 		}
 	}
-
+	sv.comprobarEstadoVista()
 	sv.servidores[x.Remitente] = 0
 	sv.Send(x.Remitente, gvcomun.MsgVistaTentativa{Vista: sv.vistaTentativa})
 
@@ -174,12 +186,14 @@ func (sv *ServVistas) procesaSituacionReplicas() {
 		// Ha fallado 4 latidos
 		if retrasos == gvcomun.LATIDOSFALLIDOS {
 			logger.Printf("Nodo Caido -> %s", servidor)
-			sv.procesarServidorCaido(servidor)
+			sv.procesarServidorCaido(servidor, false)
 		}
 	}
+	sv.comprobarEstadoVista()
+	logger.Printf("Situacion tras procesar nodos \n%v", sv.vistaTentativa)
 }
 
-func (sv *ServVistas) procesarServidorCaido(servidor msgsys.HostPuerto) {
+func (sv *ServVistas) comprobarEstadoVista() {
 	f, err := os.OpenFile("text.log",
 		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -187,19 +201,38 @@ func (sv *ServVistas) procesarServidorCaido(servidor msgsys.HostPuerto) {
 	}
 	defer f.Close()
 	logger := log.New(f, "prefix", log.LstdFlags)
-	delete(sv.servidores, servidor)
+	if sv.vistaTentativa.Primario == msgsys.HOSTINDEFINIDO {
+		logger.Printf("Primario Indefinido")
+		//sv.promocionarCopia()
+	}
+	if sv.vistaTentativa.Copia == msgsys.HOSTINDEFINIDO {
+		logger.Printf("Copia indefinida")
+		sv.nuevaVistaCopia()
+	}
+}
+
+func (sv *ServVistas) procesarServidorCaido(
+	servidor msgsys.HostPuerto, rearrancado bool) {
+	f, err := os.OpenFile("text.log",
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Println(err)
+	}
+	defer f.Close()
+	logger := log.New(f, "prefix", log.LstdFlags)
+
+	if !rearrancado {
+		delete(sv.servidores, servidor)
+	}
 	switch servidor {
 	case sv.vistaTentativa.Primario:
 		logger.Printf("Fallo del primario")
-		logger.Printf("Valida %v\n", sv.vistaValida)
-		logger.Printf("Tentativa %v\n", sv.vistaTentativa)
 		// Ha fallado el primario
 		if sv.esConsistente() {
 			logger.Printf("Es consistente")
 			sv.promocionarCopia()
 		} else {
 			logger.Printf("Es no consistente")
-
 			log.Fatalf("Fallo de consistencia %v", sv.vistaTentativa)
 		}
 	case sv.vistaTentativa.Copia:
@@ -218,24 +251,18 @@ func (sv *ServVistas) procesarServidorCaido(servidor msgsys.HostPuerto) {
 //	Solo está vivo el primario y aparece un nuevo nodo.
 func (sv *ServVistas) nuevaVistaCopia() {
 	nuevaCopia := sv.obtenerServidorEspera()
-	sv.vistaTentativa = gvcomun.Vista{
-		NumVista: sv.vistaTentativa.NumVista + 1,
-		Primario: sv.vistaTentativa.Primario,
-		Copia:    nuevaCopia,
+	if nuevaCopia != msgsys.HOSTINDEFINIDO {
+		sv.vistaTentativa = gvcomun.Vista{
+			NumVista: sv.vistaTentativa.NumVista + 1,
+			Primario: sv.vistaTentativa.Primario,
+			Copia:    nuevaCopia,
+		}
 	}
 }
 
 func (sv *ServVistas) promocionarCopia() {
-	f, err := os.OpenFile("text.log",
-		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Println(err)
-	}
-	defer f.Close()
-	logger := log.New(f, "prefix", log.LstdFlags)
-	nuevaCopia := sv.obtenerServidorEspera()
-	logger.Printf("Promocionando a copia %s\n", nuevaCopia)
 
+	nuevaCopia := sv.obtenerServidorEspera()
 	sv.vistaTentativa = gvcomun.Vista{
 		NumVista: sv.vistaTentativa.NumVista + 1,
 		Primario: sv.vistaTentativa.Copia,
@@ -244,14 +271,15 @@ func (sv *ServVistas) promocionarCopia() {
 }
 
 func (sv *ServVistas) obtenerServidorEspera() msgsys.HostPuerto {
-	if len(sv.servidores) > 2 {
+	if len(sv.servidores) > 1 {
 		for servidor, _ := range sv.servidores {
-			if servidor != sv.vistaTentativa.Primario {
+			if servidor != sv.vistaTentativa.Primario &&
+				servidor != sv.vistaTentativa.Copia {
 				return servidor
 			}
 		}
 	}
-	return ""
+	return msgsys.HOSTINDEFINIDO
 }
 
 func (sv *ServVistas) confirmarVista(x gvcomun.MsgLatido) {
@@ -263,13 +291,22 @@ func (sv *ServVistas) confirmarVista(x gvcomun.MsgLatido) {
 	defer f.Close()
 	logger := log.New(f, "prefix", log.LstdFlags)
 	if x.Remitente == sv.vistaTentativa.Primario {
-		logger.Printf("Vita confirmada %v\n", sv.vistaValida)
 		sv.vistaValida = sv.vistaTentativa
+		logger.Printf("Vista confirmada %v\n", sv.vistaValida)
 	}
 }
 
 func (sv *ServVistas) añadirServidorEspera(x gvcomun.MsgLatido) {
+	f, err := os.OpenFile("text.log",
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Println(err)
+	}
+	defer f.Close()
+	logger := log.New(f, "prefix", log.LstdFlags)
+
 	sv.servidores[x.Remitente] = 0
+	logger.Printf("Servidor Añadido %v", x)
 }
 
 func (sv *ServVistas) esConsistente() bool {

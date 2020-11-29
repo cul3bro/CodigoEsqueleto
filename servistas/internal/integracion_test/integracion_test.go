@@ -73,12 +73,25 @@ func TestPrimerasPruebas(t *testing.T) { // (m *testing.M) {
 		func(t *testing.T) { ts.PrimerCopiaTest3(t) })
 
 	// Test4: Copia toma relevo
-	t.Run(":T4",
+	t.Run("CopiaPromociona:T4",
 		func(t *testing.T) { ts.CopiaTomaRelevoTest4(t) })
 
+	// Test5: Servidor rearranca y es copia
+	t.Run("ServidorRearrancadoCopia:T5",
+		func(t *testing.T) { ts.ServidorRearrancadoEsCopiaTest5(t) })
+
+	// Test6: Servidor en espera se convierte en copia
+	t.Run("PromocionEsperaCopia:T6",
+		func(t *testing.T) { ts.PromocionEsperaCopiaTest6(t) })
+
+	t.Run("PrimarioRearrancaEspera:T7",
+		func(t *testing.T) {
+			ts.PrimarioAEsperaTest7(t)
+		})
 	// tear down code
 	// eliminar procesos en máquinas remotas
 	ts.stopDistributedProcesses()
+
 	ts.stop()
 }
 
@@ -230,32 +243,16 @@ func (ts *testServer) PrimerCopiaTest3(t *testing.T) {
 // Copia toma relevo si primario falla
 func (ts *testServer) CopiaTomaRelevoTest4(t *testing.T) {
 	var vTentativa gvcomun.Vista
-	// Mandar latidos de s2 durante 250 milis hasta que el GV de por muerto
-	// a S1
-	fmt.Printf("antes del for\n")
-	vTentativa = ts.clienteLatido(t, NODOCLIENTE2, 2)
-	vTentativa = ts.clienteLatido(t, NODOCLIENTE1, 2)
-	time.Sleep(time.Millisecond * 50)
-	vTentativa = ts.clienteLatido(t, NODOCLIENTE2, vTentativa.NumVista)
-	time.Sleep(time.Millisecond * 50)
-	vTentativa = ts.clienteLatido(t, NODOCLIENTE2, vTentativa.NumVista)
-	time.Sleep(time.Millisecond * 50)
-	vTentativa = ts.clienteLatido(t, NODOCLIENTE2, vTentativa.NumVista)
-	time.Sleep(time.Millisecond * 50)
-	vTentativa = ts.clienteLatido(t, NODOCLIENTE2, vTentativa.NumVista)
-	time.Sleep(time.Millisecond * 50)
-	vTentativa = ts.clienteLatido(t, NODOCLIENTE2, vTentativa.NumVista)
 
-	//bucle:
-	//for {
-	//	select {
-	//	case <-time.After(time.Millisecond * gvcomun.INTERVALOLATIDOS * 5):
-	//		break bucle
-	//	default:
-	//		time.Sleep(gvcomun.INTERVALOLATIDOS * time.Millisecond)
-	//		vTentativa = ts.clienteLatido(t, NODOCLIENTE2, 2)
-	//	}
-	//}
+	// Confirmamos la primera vista válida (2, Nodo1, Nodo2)
+	vTentativa = ts.clienteLatido(t, NODOCLIENTE1, 2)
+
+	for i := 0; i <= gvcomun.LATIDOSFALLIDOS; i += 1 {
+		// Mandar latidos de s2 durante 250 milis hasta que el GV de por muerto a primario
+
+		time.Sleep(time.Millisecond * 50)
+		vTentativa = ts.clienteLatido(t, NODOCLIENTE2, vTentativa.NumVista)
+	}
 	fmt.Printf("--------------------- %v\n", vTentativa)
 
 	// Preparar las vistas a comparar entre recibida y vista esperada
@@ -267,6 +264,73 @@ func (ts *testServer) CopiaTomaRelevoTest4(t *testing.T) {
 	}
 
 	// Comprobar vista tentativa recibida
+	vac.comprobar()
+	fmt.Println(".............", t.Name(), "Superado")
+}
+
+// Servidor rearrancado se convierte en copia
+func (ts *testServer) ServidorRearrancadoEsCopiaTest5(t *testing.T) {
+	vista := ts.clienteLatido0(t, NODOCLIENTE1)
+	// Preparar las vistas a comparar entre recibida y vista esperada
+	vac := vistasAcomparar{t: t,
+		recibido: vista,
+		referencia: gvcomun.Vista{Primario: NODOCLIENTE2,
+			Copia:    NODOCLIENTE1,
+			NumVista: 4},
+	}
+	fmt.Printf("Vistas %v\n", vac)
+	vac.comprobar()
+	fmt.Println(".............", t.Name(), "Superado")
+}
+
+// Servidor en espera se convierte en copia si primario falla
+func (ts *testServer) PromocionEsperaCopiaTest6(t *testing.T) {
+
+	// NODO 2 confirma vista
+	ts.clienteLatido(t, NODOCLIENTE2, 4)
+	// Arranca NODO 3
+	vistaN3 := ts.clienteLatido0(t, NODOCLIENTE3)
+	// Latido de
+
+	// Configuración -> {numVista = 4, Prim: NODO2, Cop: NODO1}
+	for i := 0; i <= gvcomun.LATIDOSFALLIDOS; i += 1 {
+		// Mandar latidos de N1 y N3 durante 250 milis hasta que el GV de por muerto a primario
+
+		time.Sleep(time.Millisecond * 50)
+		ts.clienteLatido(t, NODOCLIENTE1, 4)
+		vistaN3 = ts.clienteLatido(t, NODOCLIENTE3, 4)
+	}
+	// Configuración Deseada-> {numVista = 5, Prim: NODO1, Cop: NODO3}
+	vac := vistasAcomparar{t: t,
+		recibido: vistaN3,
+		referencia: gvcomun.Vista{Primario: NODOCLIENTE1,
+			Copia:    NODOCLIENTE3,
+			NumVista: 5},
+	}
+	fmt.Printf("Vistas %v\n", vac)
+	vac.comprobar()
+	fmt.Println(".............", t.Name(), "Superado")
+}
+
+// Servidor en espera se convierte en copia si primario falla
+func (ts *testServer) PrimarioAEsperaTest7(t *testing.T) {
+
+	// Primario confirma vista
+	ts.clienteLatido(t, NODOCLIENTE1, 5)
+	// Añadir N2 a espera
+	ts.clienteLatido0(t, NODOCLIENTE2)
+	// Rearranca N1
+	vistaN1 := ts.clienteLatido0(t, NODOCLIENTE1)
+
+	// Configuración Deseada-> {numVista = 5, Prim: NODO1, Cop: NODO3}
+	vac := vistasAcomparar{t: t,
+		recibido: vistaN1,
+		referencia: gvcomun.Vista{
+			Primario: NODOCLIENTE3,
+			Copia:    NODOCLIENTE2,
+			NumVista: 6},
+	}
+	fmt.Printf("Vistas %v\n", vac)
 	vac.comprobar()
 	fmt.Println(".............", t.Name(), "Superado")
 }
@@ -343,4 +407,9 @@ func (vs vistasAcomparar) comprobar() {
 			"%s : NUM VISTA recibido (%d) y de referencia (%d) no coinciden",
 			vs.t.Name(), vs.recibido.NumVista, vs.referencia.NumVista)
 	}
+}
+
+func (ts *testServer) lanzarNodo1() {
+	cltssh.ExecMutipleHosts(CLTVTSCMD+NODOCLIENTE1+" "+NODOGV+" "+NODOTEST,
+		[]string{MAQUINA3}, ts.cmdOutput, PRIVKEYFILE)
 }

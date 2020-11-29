@@ -22,8 +22,8 @@
 * Para una versión funcional de la práctica 4,
     esta versión v2 del esqueleto solo requeriría
         - modificar el PATH completo del directorio del modulo "servistas"
-            - en fichero "cltssh_test.go", línea 13
-            - y fichero "integración _test.go", constante "PATH"
+            - en fichero "cltssh_test.go", línea 13 --DONE
+            - y fichero "integración _test.go", constante "PATH" -- DONE
         - modificar PATH completo del fichero de clave privada para ssh
             - ubicado en fichero "integración _test.go", constante "PRIVKEYFILE"
             - y en fichero "cltssh_test.go", línea 15
